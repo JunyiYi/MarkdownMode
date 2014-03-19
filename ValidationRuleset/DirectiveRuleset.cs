@@ -13,7 +13,7 @@ namespace MarkdownMode
     /// </summary>
     /// <example>
     /// A directive is a string starts with the opening bracket '[', and followed by a directive name (the name contains only lower-letter, UPPER-LETTERS, digit-numbers, dot);
-    /// it would ends by a closing bracket ']' (also support nested brackets, i.e. the string "[WACOM.INCLUDE [howto]()]" would be treated as a single directive) or EndOfLine.
+    /// it would end by a closing bracket ']' (also support nested brackets, i.e. the string "[WACOM.INCLUDE [howto]()]" would be treated as a single directive) or EndOfLine.
     /// </example>
     [XmlRoot("DirectiveRuleset", Namespace = ValidationUtilities.ValidationXmlNamespace)]
     public class DirectiveRuleset
