@@ -107,6 +107,8 @@
     <Compile Include="ToolWindow\PreviewWindowUpdateListener.cs" />
     <Compile Include="ToolWindow\Package.cs" />
     <Compile Include="ToolWindow\PreviewToolWindow.cs" />
+    <Compile Include="ValidationRuleset\DirectiveRuleset.cs" />
+    <Compile Include="ValidationRuleset\Utilities.cs" />
     <Compile Include="WeakReference`1.cs" />
   </ItemGroup>
   <ItemGroup>
