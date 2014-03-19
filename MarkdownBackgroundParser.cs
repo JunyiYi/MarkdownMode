@@ -81,6 +81,8 @@ namespace MarkdownMode
                     if (rulesetFiles.Length > 0)
                         break;
                 }
+                this.RulesetFilePath = null;
+                this.NoRulesetFileReason = "No \"*.ruleset\" file was found in the directory hierarchy";
             }
             catch (Exception ex)
             {
