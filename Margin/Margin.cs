@@ -13,7 +13,7 @@ using Microsoft.VisualStudio.Text.Editor;
 
 namespace MarkdownMode
 {
-    sealed class Margin : StackPanel, IWpfTextViewMargin
+    sealed class Margin : Grid, IWpfTextViewMargin
     {
         public const string MarginName = "MarkdownMargin";
         
@@ -33,27 +33,57 @@ namespace MarkdownMode
             this.textView = wpfTextView;
             this.package = package;
 
-            this.Orientation = System.Windows.Controls.Orientation.Horizontal;
-            this.Background = Brushes.SlateGray;
-            this.Height = 25;
+            base.Background = Brushes.SlateGray;
 
-            Button showPreview = new Button() { Content = "Show preview window" };
+            StackPanel outlinePanel = new StackPanel
+            { 
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Height = 25
+            };
+
+            Button showPreview = new Button { Content = "Show preview window" };
             showPreview.Click += HandleShowPreviewClick;
+            outlinePanel.Children.Add(showPreview);
 
-            this.Children.Add(showPreview);
-
-            Button copyHtml = new Button() { Content = "Copy HTML to clipboard" };
+            Button copyHtml = new Button { Content = "Copy HTML to clipboard" };
             copyHtml.Click += HandleCopyHtmlClick;
-
-            this.Children.Add(copyHtml);
+            outlinePanel.Children.Add(copyHtml);
 
             sectionCombo = new ComboBox();
             sectionCombo.SelectionChanged += HandleSectionComboSelectionChanged;
-
-            this.Children.Add(sectionCombo);
+            outlinePanel.Children.Add(sectionCombo);
 
             backgroundParser = textView.TextBuffer.Properties.GetOrCreateSingletonProperty(typeof(MarkdownBackgroundParser),
                 () => new MarkdownBackgroundParser(textView.TextBuffer, TaskScheduler.Default, textDocumentFactoryService));
+
+            StackPanel rulesetPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal
+            };
+
+            Label rulesetLabel = new Label 
+            {
+                Content = "Ruleset File:  ", 
+                Foreground = Brushes.White
+            };
+            rulesetPanel.Children.Add(rulesetLabel);
+
+            Label rulesetPathLabel = new Label
+            {
+                Content = string.IsNullOrWhiteSpace(backgroundParser.RulesetFilePath) ? "Not Loaded" : backgroundParser.RulesetFilePath,
+                ToolTip = backgroundParser.NoRulesetFileReason,
+                Foreground = Brushes.White
+            };
+            rulesetPanel.Children.Add(rulesetPathLabel);
+
+            Expander optionsExpander = new Expander() { 
+                Header = outlinePanel,
+                Content = rulesetPanel
+            };
+
+            this.Children.Add(optionsExpander);
 
             sections = new List<MarkdownSection>();
             backgroundParser.ParseComplete += HandleBackgroundParseComplete;

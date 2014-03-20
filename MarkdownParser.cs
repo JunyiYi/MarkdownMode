@@ -11,6 +11,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using MarkdownSharp;
 using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Text.Adornments;
+using Microsoft.VisualStudio.Text.Tagging;
 
 namespace MarkdownMode
 {
@@ -228,6 +230,115 @@ namespace MarkdownMode
         }
 
         #endregion
+
+        #region Markdown public validation interface
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        //
+        // Validate the mardown directive syntax according to the ruleset definitions
+        //
+        // Copyright (c) 2014 Microsoft Corporation.
+        // Author: Junyi Yi (junyi@microsoft.com) - Initial version
+        //
+        ///////////////////////////////////////////////////////////////////////////////////
+
+        /// <summary>
+        /// Validate the whole document according to the specified ruleset.
+        /// </summary>
+        /// <param name="snapshot">The whole document snapshot.</param>
+        /// <param name="errorTagger">The tagger used to generate error squiggles.</param>
+        /// <param name="ruleset">The specified ruleset.</param>
+        public static void ValidateDirectiveSyntax(ITextSnapshot snapshot, DirectiveRuleset ruleset, SimpleTagger<ErrorTag> errorTagger)
+        {
+            // Remove all current error squiggles
+            errorTagger.RemoveTagSpans(errorTagSpan => true);
+
+            // Get the full document text and clear all HTML tags
+            string text = snapshot.GetText();
+            text = MarkdownParser.DestroyHtmlTags(text);
+
+            // Three cases: 
+            // 0123456789              01234567 8              01234567  8
+            // [  WA ab ]              [  WA ab \n             [  WA ab EOT
+            // |        |-endIndex=9   |        |-endIndex=8   |         |-endIndex=8
+            // |-startIndex=0          |-startIndex=0          |-startIndex=0
+
+            // Greedily search for the pair of '[...]' (supports nested pair '[... [...] ...]')
+            // Here 'Greedily' means if we have a string '[...[...]', it would also treat the latter '[...]' as the pair
+            for (int startIndex = text.IndexOf('['); startIndex >= 0; startIndex = text.IndexOf('[', startIndex))
+            {
+                int endIndex = MarkdownParser.FindCorrespondingEndBracket(text, startIndex + 1);
+
+                ITrackingSpan overallDirective = snapshot.CreateTrackingSpan(startIndex + 1, endIndex - startIndex - 1, SpanTrackingMode.EdgeInclusive);
+                string directive = overallDirective.GetText(snapshot);
+                var directiveMatches = Regex.Matches(directive, string.Concat(@"^\s*(", ValidationUtilities.DirectiveNameRegularPattern, @")(.*)$"));
+                if (directiveMatches.Count != 1 || !directiveMatches[0].Success || directiveMatches[0].Groups.Count != 3 || directiveMatches[0].Value != directive)
+                {
+                    startIndex++;
+                    continue;
+                }
+                string directiveName = directiveMatches[0].Groups[1].Value;
+                string directiveContent = directiveMatches[0].Groups[2].Value;
+
+                var rule = ruleset.TryGetDirectiveRule(directiveName);
+                if (rule != null)
+                {
+                    // If we found a exactly-matched rule, just validate it
+                    string message = rule.Validate(directiveContent);
+                    if (message != null)
+                    {
+                        errorTagger.CreateTagSpan(overallDirective, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, message));
+                    }
+                }
+                else
+                {
+                    // Otherwise we may take a look at the suspects
+                    var suspects = ruleset.GetSuspects(directive);
+                    if (suspects.Count() > 0)
+                    {
+                        StringBuilder suspectPrompt = new StringBuilder();
+                        suspectPrompt.AppendLine("Are you trying to enter one of the following directives?");
+                        foreach (var suspect in suspects)
+                        {
+                            suspectPrompt.AppendLine(string.Format("    \u2022 {0} - {1}", suspect.ParentRule.DirectiveName, suspect.SuggestionMessage));
+                        }
+                        errorTagger.CreateTagSpan(overallDirective, new ErrorTag(PredefinedErrorTypeNames.Warning, suspectPrompt.ToString().TrimEnd()));
+                    }
+                }
+
+                startIndex = endIndex;
+            }
+        }
+
+        /// <summary>
+        /// Finds the ending bracket ']' in the text corresponding to the start bracket '[' within the same line. This methods supports nested pair.
+        /// </summary>
+        /// <param name="text">The specified text.</param>
+        /// <param name="startIndex">The specified index.</param>
+        /// <returns>The ending bracket ']' character index or EndOfLine or EndOfText.</returns>
+        private static int FindCorrespondingEndBracket(string text, int startIndex)
+        {
+            int nestLevel = 0;  // Currently no '[...]' pair was nested
+            for (; startIndex < text.Length; startIndex++)
+            {
+                switch (text[startIndex])
+                {
+                    case '[':
+                        nestLevel++;
+                        break;
+                    case ']':
+                        if (nestLevel-- == 0)
+                            return startIndex;
+                        break;
+                    case '\r':
+                    case '\n':
+                        return startIndex;
+                }
+            }
+            return text.Length;
+        }
+
+        #endregion Markdown public validation interface
 
         #region Parser methods (private)
 

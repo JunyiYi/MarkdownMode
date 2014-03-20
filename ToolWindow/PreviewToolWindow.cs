@@ -86,7 +86,7 @@ namespace MarkdownMode
 
         public void SetPreviewContent(object source, string html, string title)
         {
-            if (string.IsNullOrEmpty(html) && string.IsNullOrEmpty(title))
+            if (string.IsNullOrEmpty(html) || string.IsNullOrEmpty(title))
             {
                 ClearPreviewContent();
                 return;
