@@ -262,13 +262,14 @@ namespace MarkdownMode
             // [  WA ab ]              [  WA ab \n             [  WA ab EOT
             // |        |-endIndex=9   |        |-endIndex=8   |         |-endIndex=8
             // |-startIndex=0          |-startIndex=0          |-startIndex=0
-
+            
             // Greedily search for the pair of '[...]' (supports nested pair '[... [...] ...]')
             // Here 'Greedily' means if we have a string '[...[...]', it would also treat the latter '[...]' as the pair
             for (int startIndex = text.IndexOf('['); startIndex >= 0; startIndex = text.IndexOf('[', startIndex))
             {
                 int endIndex = MarkdownParser.FindCorrespondingEndBracket(text, startIndex + 1);
 
+                // Get the directive content string
                 ITrackingSpan overallDirective = snapshot.CreateTrackingSpan(startIndex + 1, endIndex - startIndex - 1, SpanTrackingMode.EdgeInclusive);
                 string directive = overallDirective.GetText(snapshot);
                 var directiveMatches = Regex.Matches(directive, string.Concat(@"^\s*(", ValidationUtilities.DirectiveNameRegularPattern, @")(.*)$"));
@@ -283,11 +284,27 @@ namespace MarkdownMode
                 var rule = ruleset.TryGetDirectiveRule(directiveName);
                 if (rule != null)
                 {
+                    // Get the preceding and following directive string of the same line
+                    ITextSnapshotLine line = snapshot.GetLineFromPosition(startIndex);
+                    string precedingText = snapshot.GetText(line.Start, startIndex - line.Start);
+                    string followingText = endIndex < line.End ? snapshot.GetText(endIndex + 1, line.End - endIndex - 1) : string.Empty;
+
                     // If we found a exactly-matched rule, just validate it
-                    string message = rule.Validate(directiveContent);
+                    string message = rule.Validate(directiveContent, precedingText, followingText);
                     if (message != null)
                     {
-                        errorTagger.CreateTagSpan(overallDirective, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, message));
+                        ITrackingSpan squiggleSpan = overallDirective;
+                        if (rule.SquiggleWholeLine)
+                        {
+                            squiggleSpan = snapshot.CreateTrackingSpan(line.Start, line.Length, SpanTrackingMode.EdgeInclusive);
+                        }
+                        errorTagger.CreateTagSpan(squiggleSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, message));
+                    }
+
+                    // If we miss the closing bracket, give out the prompt message
+                    if (endIndex >= text.Length || text[endIndex] != ']')
+                    {
+                        errorTagger.CreateTagSpan(snapshot.CreateTrackingSpan(line.End, 0, SpanTrackingMode.EdgePositive), new ErrorTag(PredefinedErrorTypeNames.CompilerError, "Missing the closing bracket"));
                     }
                 }
                 else

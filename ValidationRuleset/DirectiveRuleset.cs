@@ -97,12 +97,17 @@ namespace MarkdownMode
         [XmlArrayItem("RegularExpressionSuspect", typeof(RegExSuspect))]
         public List<Suspect> Suspects { get; set; }
 
+        [XmlAttribute("SquiggleWholeLine")]
+        public bool SquiggleWholeLine { get; set; }
+
         /// <summary>
         /// Validate the specified directive content string and returns the validation result.
         /// </summary>
         /// <param name="directiveContent">The specified directive content string.</param>
+        /// <param name="precedingDirective">The preceding directive content string of the same line.</param>
+        /// <param name="followingDirective">The following directive content string of the same line.</param>
         /// <returns><c>null</c> if validation passed; otherwise the error message (allowed to be string.Empty).</returns>
-        protected internal abstract string Validate(string directiveContent);
+        protected internal abstract string Validate(string directiveContent, string precedingDirective, string followingDirective);
 
         /// <summary>
         /// Get all suspects of the specified overall directive (exclude the '[' and ']' character) which may be representing the current DirectiveName.
@@ -143,21 +148,43 @@ namespace MarkdownMode
 
     /// <summary>
     /// This class represents the regular expression validation rule to validate a directive string.
+    /// The validation is splited into 3 parts (take the line 'abc [WACOM.INCLUDE (123) ] xyz' as the example):
+    ///     * PrecedingSyntax: the pattern used to validate 'abc '
+    ///     * Syntax: the pattern used to validate ' (123) '
+    ///     * FollowingSyntax: the pattern used to validate ' xyz'
     /// </summary>
     public class RegExDirectiveRule : DirectiveRule
     {
         [XmlElement("Syntax")]
         public string SyntaxPattern { get; set; }
 
+        [XmlElement("PrecedingSyntax")]
+        public string PrecedingPattern { get; set; }
+
+        [XmlElement("FollowingSyntax")]
+        public string FollowingPattern { get; set; }
+
         [XmlElement("ErrorMessage")]
         public string ErrorMessage { get; set; }
 
-        protected internal override string Validate(string directiveContent)
+        protected internal override string Validate(string directiveContent, string precedingDirective, string followingDirective)
         {
             Match match = Regex.Match(directiveContent, this.SyntaxPattern);
-            if (match.Success && match.Value == directiveContent)
-                return null;
-            return this.ErrorMessage;
+            if (!match.Success || match.Value != directiveContent)
+                return this.ErrorMessage;
+            if (!string.IsNullOrEmpty(this.PrecedingPattern))
+            {
+                match = Regex.Match(precedingDirective, this.PrecedingPattern);
+                if (!match.Success || match.Value != precedingDirective)
+                    return this.ErrorMessage;
+            }
+            if (!string.IsNullOrEmpty(this.FollowingPattern))
+            {
+                match = Regex.Match(followingDirective, this.FollowingPattern);
+                if (!match.Success || match.Value != followingDirective)
+                    return this.ErrorMessage;
+            }
+            return null;
         }
     }
 
